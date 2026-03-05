@@ -12,6 +12,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#f97316">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Survivor 50">
+    
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <style>
         body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -120,6 +128,7 @@
         
         const Icons = {
             Trophy: createIcon('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>'),
+            MessageCircle: createIcon('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>'),
             Plus: createIcon('<path d="M12 5v14m-7-7h14"></path>'),
             Edit: createIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>'),
             Book: createIcon('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>'),
@@ -238,6 +247,12 @@
             const [showAddScore, setShowAddScore] = useState(false);
             const [showMarkElimination, setShowMarkElimination] = useState(false);
             const [showMarkWinner, setShowMarkWinner] = useState(false);
+            const [showMassPoints, setShowMassPoints] = useState(false);
+            const [showTribeEditor, setShowTribeEditor] = useState(false);
+            const [selectedTribe, setSelectedTribe] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState('');
+            const [playerTribes, setPlayerTribes] = useState({});
+            const [tempTribes, setTempTribes] = useState({});
             const [expandedTeams, setExpandedTeams] = useState({});
             
             // Load data from Firebase
@@ -263,6 +278,11 @@
                 database.ref('currentEpisode').on('value', (snapshot) => {
                     setCurrentEpisode(snapshot.val() || 1);
                 });
+                database.ref('playerTribes').on('value', (snapshot) => {
+                    const tribes = snapshot.val() || {};
+                    setPlayerTribes(tribes);
+                    setTempTribes(tribes);
+                });
                 
                 return () => {
                     database.ref('teams').off();
@@ -270,6 +290,7 @@
                     database.ref('eliminationOrder').off();
                     database.ref('winner').off();
                     database.ref('currentEpisode').off();
+                    database.ref('playerTribes').off();
                 };
             }, []);
             
@@ -285,12 +306,6 @@
                             total += score.points || 0;
                         });
                     });
-                    
-                    // Add elimination bonus
-                    if (eliminationOrder[player.id]) {
-                        const episode = eliminationOrder[player.id];
-                        total += episode; // Points = episode number (rewards longevity)
-                    }
                 });
                 
                 // Add winner bonus (20 points if winner is on this team)
@@ -325,11 +340,6 @@
                     });
                 });
                 
-                // Add elimination bonus
-                if (eliminationOrder[playerId]) {
-                    const episode = eliminationOrder[playerId];
-                    total += episode; // Points = episode number (rewards longevity)
-                }
                 
                 return total;
             };
@@ -352,17 +362,6 @@
                     });
                 });
                 
-                // Add elimination bonus if exists
-                if (eliminationOrder[playerId]) {
-                    const episode = eliminationOrder[playerId];
-                    const placement = 25 - episode; // Calculate placement
-                    breakdown.push({
-                        episode: episode,
-                        category: 'Elimination Bonus',
-                        points: episode,
-                        note: `Placed ${placement}th (Episode ${episode})`
-                    });
-                }
                 
                 // Add winner bonus if this player won
                 if (winner && parseInt(winner) === playerId) {
@@ -393,6 +392,63 @@
                     }
                 }
             };
+            // Mass assign points to entire tribe
+            const assignTribePoints = async () => {
+                if (!selectedTribe || !selectedCategory) {
+                    alert('Please select both tribe and category');
+                    return;
+                }
+                
+                const category = scoringCategories.find(c => c.id === selectedCategory);
+                const tribePlayers = players.filter(p => 
+                playerTribes[p.id] === selectedTribe && !eliminationOrder[p.id]
+                );
+                
+                if (tribePlayers.length === 0) {
+                    alert('No players found on this tribe');
+                    return;
+                }
+                
+                try {
+                    for (const player of tribePlayers) {
+                        const scoreId = Date.now() + '_' + Math.random().toString(36);
+                        await database.ref(`scores/${player.id}/${currentEpisode}/${scoreId}`).set({
+                            category: category.name,
+                            points: category.points,
+                            note: `${selectedTribe} tribe reward`,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
+                    alert(`✅ Added ${category.points} points to all ${tribePlayers.length} players on ${selectedTribe}!`);
+                    setShowMassPoints(false);
+                    setSelectedTribe('');
+                    setSelectedCategory('');
+                } catch (error) {
+                    console.error('Error assigning tribe points:', error);
+                    alert('Error assigning points. Please try again.');
+                }
+            };
+            
+            // Save tribe changes
+            const saveTribeChanges = async () => {
+                try {
+                    await database.ref('playerTribes').set(tempTribes);
+                    alert('✅ Tribe changes saved!');
+                    setShowTribeEditor(false);
+                } catch (error) {
+                    console.error('Error saving tribes:', error);
+                    alert('Error saving tribes. Please try again.');
+                }
+            };
+            
+            // Update temp tribe for a player
+            const updateTempTribe = (playerId, newTribe) => {
+                setTempTribes(prev => ({
+                    ...prev,
+                    [playerId]: newTribe
+                }));
+            };
             
             return h('div', { className: 'min-h-screen grey-ombre-bg p-4 md:p-8' },
                 h('div', { className: 'max-w-7xl mx-auto' },
@@ -405,6 +461,13 @@
                             },
                                 h(Icons.Home, { size: 20 }),
                                 h('span', { className: 'font-bold' }, 'Draft')
+                            ),
+                            h('a', {
+                                href: 'chat.html',
+                                className: 'bg-white/90 backdrop-blur-md px-4 py-2 rounded-lg hover:bg-white transition flex items-center gap-2'
+                            },
+                                h(Icons.MessageCircle, { size: 20 }),
+                                h('span', { className: 'font-bold' }, 'Chat')
                             )
                         ),
                         h('h1', { 
@@ -446,6 +509,20 @@
                         },
                             h(Icons.Trophy, { size: 20 }),
                             'Mark Winner'
+                        ),
+                        h('button', {
+                            onClick: () => setShowMassPoints(true),
+                            className: 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2'
+                        },
+                            h(Icons.Trophy, { size: 20 }),
+                            'Tribe Points'
+                        ),
+                        h('button', {
+                            onClick: () => setShowTribeEditor(true),
+                            className: 'bg-gradient-to-r from-purple-500 to-violet-600 text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition flex items-center gap-2'
+                        },
+                            h(Icons.Edit, { size: 20 }),
+                            'Edit Tribes'
                         )
                     ),
                     
@@ -696,7 +773,7 @@
                                             className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none'
                                         },
                                             h('option', { value: '' }, 'Choose a player...'),
-                                            ...players.map(player => 
+                                            ...players.filter(p => !eliminationOrder[p.id]).map(player =>
                                                 h('option', { key: player.id, value: player.id }, player.name)
                                             )
                                         )
@@ -734,7 +811,7 @@
                                                 h('option', { 
                                                     key: cat.id, 
                                                     value: cat.id 
-                                                }, `${cat.name} (+${cat.points} pts)`)
+                                                }, `${cat.name} (${cat.points > 0 ? '+' : ''}${cat.points} pts)`)
                                             )
                                         )
                                     ),
@@ -854,15 +931,10 @@
                                                 const ep = i + 1;
                                                 const placement = 25 - ep;
                                                 return h('option', { key: ep, value: ep }, 
-                                                    `Episode ${ep} (${placement}th place - ${ep} pts)`
+                                                    `Episode ${ep}`
                                                 );
                                             })
                                         )
-                                    ),
-                                    
-                                    h('div', { className: 'bg-orange-50 p-4 rounded-lg text-sm' },
-                                        h('p', { className: 'font-bold mb-2' }, '📊 Elimination Bonus'),
-                                        h('p', {}, 'The player will receive bonus points equal to the episode number they were eliminated.')
                                     ),
                                     
                                     // Submit Button
@@ -977,6 +1049,136 @@
                             )
                         )
                     ),
+                  // Mass Tribe Points Modal
+                    showMassPoints && h('div', {
+                        className: 'modal-backdrop',
+                        onClick: () => setShowMassPoints(false)
+                    },
+                        h('div', {
+                            className: 'modal-content',
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            h('div', { className: 'p-6' },
+                                h('div', { className: 'flex justify-between items-center mb-6' },
+                                    h('h2', { className: 'text-2xl font-bold' }, '🏆 Assign Points to Entire Tribe'),
+                                    h('button', {
+                                        onClick: () => setShowMassPoints(false),
+                                        className: 'text-gray-500 hover:text-gray-700'
+                                    }, h(Icons.X, { size: 24 }))
+                                ),
+                                
+                                h('div', { className: 'space-y-4 mb-6' },
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold mb-2' }, 'Select Tribe'),
+                                        h('select', {
+                                            value: selectedTribe,
+                                            onChange: (e) => setSelectedTribe(e.target.value),
+                                            className: 'w-full p-3 border-2 border-gray-300 rounded-xl'
+                                        },
+                                            h('option', { value: '' }, '-- Select Tribe --'),
+                                            h('option', { value: 'Cila' }, '🔥 Cila (Orange)'),
+                                            h('option', { value: 'Kalo' }, '🌊 Kalo (Teal)'),
+                                            h('option', { value: 'Vatu' }, '⚡ Vatu (Purple)')
+                                        )
+                                    ),
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold mb-2' }, 'Select Category'),
+                                        h('select', {
+                                            value: selectedCategory,
+                                            onChange: (e) => setSelectedCategory(e.target.value),
+                                            className: 'w-full p-3 border-2 border-gray-300 rounded-xl'
+                                        },
+                                            h('option', { value: '' }, '-- Select Category --'),
+                                            h('option', { value: 'tribe-immunity' }, 'Wins Tribe Immunity (+15 pts)'),
+                                            h('option', { value: 'tribe-immunity-second' }, 'Second Place Tribe Immunity (+10 pts)'),
+                                            h('option', { value: 'tribe-reward' }, 'Wins Tribe Reward (+10 pts)'),
+                                            h('option', { value: 'tribe-reward-second' }, 'Second Place Tribe Reward (+5 pts)')
+                                        )
+                                    ),
+                                    selectedTribe && selectedCategory && h('div', {
+                                        className: 'bg-blue-50 border-2 border-blue-200 rounded-xl p-4'
+                                    },
+                                        h('p', { className: 'text-sm' },
+                                            `This will assign points to all players currently on ${selectedTribe}`
+                                        )
+                                    )
+                                ),
+                                
+                                h('div', { className: 'flex gap-3' },
+                                    h('button', {
+                                        onClick: () => setShowMassPoints(false),
+                                        className: 'flex-1 px-6 py-3 bg-gray-200 rounded-xl font-bold hover:bg-gray-300 transition'
+                                    }, 'Cancel'),
+                                    h('button', {
+                                        onClick: assignTribePoints,
+                                        disabled: !selectedTribe || !selectedCategory,
+                                        className: 'flex-1 px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl font-bold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed'
+                                    }, 'Assign to Tribe')
+                                )
+                            )
+                        )
+                    ),
+                    
+                    // Tribe Editor Modal
+                    showTribeEditor && h('div', {
+                        className: 'modal-backdrop',
+                        onClick: () => setShowTribeEditor(false)
+                    },
+                        h('div', {
+                            className: 'modal-content',
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            h('div', { className: 'p-6' },
+                                h('div', { className: 'flex justify-between items-center mb-6' },
+                                    h('h2', { className: 'text-2xl font-bold' }, '⚡ Edit Player Tribes'),
+                                    h('button', {
+                                        onClick: () => {
+                                            setTempTribes(playerTribes);
+                                            setShowTribeEditor(false);
+                                        },
+                                        className: 'text-gray-500 hover:text-gray-700'
+                                    }, h(Icons.X, { size: 24 }))
+                                ),
+                                
+                                h('div', { className: 'max-h-96 overflow-y-auto mb-6' },
+                                    h('div', { className: 'grid gap-3' },
+                                        ...players.filter(p => !eliminationOrder[p.id]).map(player =>
+                                            h('div', {
+                                                key: player.id,
+                                                className: 'flex items-center justify-between p-3 bg-gray-50 rounded-xl'
+                                            },
+                                                h('div', { className: 'font-semibold' }, player.name),
+                                                h('select', {
+                                                    value: tempTribes[player.id] || '',
+                                                    onChange: (e) => updateTempTribe(player.id, e.target.value),
+                                                    className: 'p-2 border-2 border-gray-300 rounded-lg'
+                                                },
+                                                    h('option', { value: '' }, '-- No Tribe --'),
+                                                    h('option', { value: 'Cila' }, '🔥 Cila'),
+                                                    h('option', { value: 'Kalo' }, '🌊 Kalo'),
+                                                    h('option', { value: 'Vatu' }, '⚡ Vatu')
+                                                )
+                                            )
+                                        )
+                                    )
+                                ),
+                                
+                                h('div', { className: 'flex gap-3' },
+                                    h('button', {
+                                        onClick: () => {
+                                            setTempTribes(playerTribes);
+                                            setShowTribeEditor(false);
+                                        },
+                                        className: 'flex-1 px-6 py-3 bg-gray-200 rounded-xl font-bold hover:bg-gray-300 transition'
+                                    }, 'Cancel'),
+                                    h('button', {
+                                        onClick: saveTribeChanges,
+                                        className: 'flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-bold hover:shadow-lg transition'
+                                    }, 'Save Changes')
+                                )
+                            )
+                        )
+                    ),
                     
                     // Footer
                     h('div', { className: 'mt-12 text-center text-gray-900' },
@@ -988,6 +1190,25 @@
         
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(h(ScoringPage));
+    }
+    </script>
+    
+    <!-- PWA Service Worker -->
+    <script>
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js')
+            .then((registration) => {
+                console.log('Service Worker registered:', registration);
+            })
+            .catch((error) => {
+                console.error('Service Worker registration failed:', error);
+            });
+    }
+
+    // Detect if running as installed PWA
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        console.log('Running as installed PWA');
     }
     </script>
 </body>
