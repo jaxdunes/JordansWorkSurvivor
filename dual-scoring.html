@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survivor 50 - Dual League Scoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        #root { min-height: 100vh; }
+        .dual-bg {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+            min-height: 100vh;
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            width: 100%;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div style="display: flex; justify-content: center; align-items: center; min-height: 100vh; font-size: 24px; color: white; font-weight: bold;">
+            🔥 Loading Dual League Scoring...
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+    // DUAL FIREBASE CONFIGURATION - Connects to BOTH leagues!
+    const familyConfig = {
+        apiKey: "AIzaSyAls1zpuUGgNx7xhlpCjF4bDEXp8qfxQ3A",
+        authDomain: "survivorfantasy-cc908.firebaseapp.com",
+        databaseURL: "https://survivorfantasy-cc908-default-rtdb.firebaseio.com",
+        projectId: "survivorfantasy-cc908",
+        storageBucket: "survivorfantasy-cc908.firebasestorage.app",
+        messagingSenderId: "401357232113",
+        appId: "1:401357232113:web:a9980c49bde38ff981d650"
+    };
+    
+    const workConfig = {
+        apiKey: "AIzaSyCwOmZTlzlWZK8LDK4gcl-H8ChCPuX3enk",
+        authDomain: "jordan-s-fantasy-league.firebaseapp.com",
+        databaseURL: "https://jordan-s-fantasy-league-default-rtdb.firebaseio.com",
+        projectId: "jordan-s-fantasy-league",
+        storageBucket: "jordan-s-fantasy-league.firebasestorage.app",
+        messagingSenderId: "17450579275",
+        appId: "1:17450579275:web:28f629360b4c77dd8464ce"
+    };
+    
+    let familyDB, workDB;
+    let firebaseInitialized = false;
+    
+    try {
+        const familyApp = firebase.initializeApp(familyConfig, 'family');
+        const workApp = firebase.initializeApp(workConfig, 'work');
+        familyDB = familyApp.database();
+        workDB = workApp.database();
+        firebaseInitialized = true;
+        console.log('🔥 Both Firebase databases connected!');
+    } catch (error) {
+        console.error('Firebase error:', error);
+    }
+    
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            initializeApp();
+        }, 500);
+    });
+    
+    function initializeApp() {
+        const { createElement: h, useState, Fragment } = React;
+        
+        const createIcon = (svgContent) => {
+            return (props) => h('svg', {
+                width: props.size || 24,
+                height: props.size || 24,
+                viewBox: '0 0 24 24',
+                fill: 'none',
+                stroke: 'currentColor',
+                strokeWidth: 2,
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                dangerouslySetInnerHTML: { __html: svgContent }
+            });
+        };
+        
+        const Icons = {
+            Plus: createIcon('<path d="M12 5v14m-7-7h14"></path>'),
+            X: createIcon('<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>'),
+            Trophy: createIcon('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>'),
+            ExternalLink: createIcon('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>')
+        };
+        
+        function DualScoringPage() {
+            const players = [
+                { id: 1, name: "Jenna Lewis-Dougherty" },
+                { id: 2, name: "Cirie Fields" },
+                { id: 3, name: "Ozzy Lusth" },
+                { id: 4, name: "Christian Hubicki" },
+                { id: 5, name: "Rick Devens" },
+                { id: 6, name: "Emily Flippen" },
+                { id: 7, name: "Joe Hunter" },
+                { id: 8, name: "Savannah Louie" },
+                { id: 9, name: "Coach Wade" },
+                { id: 10, name: "Chrissy Hofbeck" },
+                { id: 11, name: "Mike White" },
+                { id: 12, name: "Jonathan Young" },
+                { id: 13, name: "Charlie Davis" },
+                { id: 14, name: "Tiffany Ervin" },
+                { id: 15, name: "Kamilla Karthigesu" },
+                { id: 16, name: "Dee Valladares" },
+                { id: 17, name: "Colby Donaldson" },
+                { id: 18, name: "Stephenie LaGrossa" },
+                { id: 19, name: "Aubry Bracco" },
+                { id: 20, name: "Angelina Keeley" },
+                { id: 21, name: "Genevieve Mushaluk" },
+                { id: 22, name: "Q Burdette" },
+                { id: 23, name: "Rizo Velovic" },
+                { id: 24, name: "Kyle Fraser" }
+            ];
+            
+            const scoringCategories = [
+                { id: 'solo-immunity', name: 'Wins Solo Immunity', points: 25 },
+                { id: 'tribe-immunity', name: 'Wins Tribe Immunity', points: 15 },
+                { id: 'tribe-immunity-second', name: 'Second Place Tribe Immunity', points: 10 },
+                { id: 'tribe-reward', name: 'Wins Tribe Reward', points: 10 },
+                { id: 'tribe-reward-second', name: 'Second Place Tribe Reward', points: 5 },
+                { id: 'solo-reward', name: 'Wins Solo Reward', points: 15 },
+                { id: 'reward-pick', name: 'Chosen to Go On Reward', points: 3 },
+                { id: 'first-to-drop', name: 'First to Drop', points: -2 },
+                { id: 'made-merge', name: 'Makes It to the Merge', points: 10 },
+                { id: 'showmance-start', name: 'Starts a Showmance', points: 5 },
+                { id: 'showmance-end', name: 'Ends a Showmance', points: -3 },
+                { id: 'finds-idol', name: 'Finds a Hidden Immunity Idol', points: 10 },
+                { id: 'named-alliance', name: 'Makes a named alliance', points: 5 },
+                { id: 'makes-jury', name: 'Makes It to Jury', points: 10 },
+                { id: 'uses-idol-self', name: 'Uses Hidden Immunity Idol On Self', points: 5 },
+                { id: 'uses-idol-correctly', name: 'Uses Hidden Immunity Idol Correctly', points: 5 },
+                { id: 'uses-idol-ally', name: 'Uses Hidden Immunity Idol On Somebody Else', points: 3 },
+                { id: 'idol-used-them', name: 'Has Hidden Immunity Idol Used On Them', points: 5 },
+                { id: 'voted-out', name: 'Gets Voted Out', points: -25 },
+                { id: 'votes-survived', name: 'Gets Votes and Survives (0.5 × # of votes)', points: 0.5 },
+                { id: 'pulls-rock', name: 'Pulls a Rock', points: 1 },
+                { id: 'first-voted-out', name: 'First Voted Out', points: -10 },
+                { id: 'wins-fire', name: 'Wins Fire Making Challenge', points: 5 },
+                { id: 'shot-dark-correct', name: 'Plays shot in the dark correctly', points: 15 },
+                { id: 'voted-idol-pocket', name: 'Voted out with idol in pocket', points: -10 },
+                { id: 'lost-vote', name: 'Does not have a vote during tribal', points: -5 },
+                { id: 'hashtag', name: 'Inspires an on-screen hashtag', points: 1 },
+                { id: 'mentions-prev-player', name: 'Mentions a Player from a Previous Season', points: -1 },
+                { id: 'names-episode', name: 'Says the title of the episode', points: 10 },
+                { id: 'camp-meeting', name: 'Calls a Camp Meeting to Confront Someone', points: -5 },
+                { id: 'yelling-match', name: 'Gets in a Yelling Match', points: -5 },
+                { id: 'confessional-tears', name: 'Cries in Confessional', points: -1 },
+                { id: 'public-tears', name: 'Cries in Front of Player', points: -3 },
+                { id: 'expelled', name: 'Expelled from the Island', points: 25 },
+                { id: 'medevac', name: 'Medical Removed from Island', points: -25 },
+                { id: 'voted-w-idol', name: 'Voted out with idol', points: -10 },
+                { id: 'voted-w-advantage', name: 'Voted out with advantage', points: -10 },
+                { id: 'finds-advantage', name: 'Finds a Special Power/Advantage', points: 5 },
+                { id: 'given-advantage', name: 'Is Given a Special Power from Somebody', points: 5 },
+                { id: 'uses-advantage-correct', name: 'Uses advantage correctly', points: 10 },
+                { id: 'fails-advantage', name: 'Fails the advantage challenge', points: -10 },
+                { id: 'most-votes', name: 'Most votes against at end of season', points: 15 },
+                { id: 'least-votes', name: 'Least votes against (Post-Merge)', points: 15 },
+                { id: 'most-immunities', name: 'Most individual immunities won', points: 20 },
+                { id: 'most-idols-found', name: 'Most idols/advantages found', points: 20 },
+                { id: 'sole-survivor', name: 'Sole Survivor', points: 75 },
+                { id: 'runner-up', name: 'Runner-ups', points: 25 }
+            ];
+            
+            const [showAddScore, setShowAddScore] = useState(false);
+            const [showMarkElimination, setShowMarkElimination] = useState(false);
+            const [showMarkWinner, setShowMarkWinner] = useState(false);
+            const [currentEpisode, setCurrentEpisode] = useState(1);
+            
+            // Dual-write function - THE MAGIC!
+            const addPointsToBoth = async (playerId, episode, scoreData) => {
+                if (!firebaseInitialized) {
+                    alert('Firebase not initialized');
+                    return;
+                }
+                
+                try {
+                    const scoreId = Date.now().toString();
+                    
+                    // Write to FAMILY league
+                    await familyDB.ref(`scores/${playerId}/${episode}/${scoreId}`).set(scoreData);
+                    
+                    // Write to WORK league
+                    await workDB.ref(`scores/${playerId}/${episode}/${scoreId}`).set(scoreData);
+                    
+                    alert('✅ Points added to BOTH leagues!');
+                    return true;
+                } catch (err) {
+                    console.error('Error adding points:', err);
+                    alert('❌ Error: ' + err.message);
+                    return false;
+                }
+            };
+            
+            const markEliminationBoth = async (playerId, episode) => {
+                if (!firebaseInitialized) {
+                    alert('Firebase not initialized');
+                    return;
+                }
+                
+                try {
+                    // Mark in FAMILY league
+                    await familyDB.ref(`eliminationOrder/${playerId}`).set(parseInt(episode));
+                    
+                    // Mark in WORK league
+                    await workDB.ref(`eliminationOrder/${playerId}`).set(parseInt(episode));
+                    
+                    alert('✅ Player eliminated in BOTH leagues!');
+                    return true;
+                } catch (err) {
+                    console.error('Error marking elimination:', err);
+                    alert('❌ Error: ' + err.message);
+                    return false;
+                }
+            };
+            
+            const markWinnerBoth = async (playerId) => {
+                if (!firebaseInitialized) {
+                    alert('Firebase not initialized');
+                    return;
+                }
+                
+                try {
+                    // Mark in FAMILY league
+                    await familyDB.ref('winner').set(parseInt(playerId));
+                    
+                    // Mark in WORK league
+                    await workDB.ref('winner').set(parseInt(playerId));
+                    
+                    alert('🎉 Winner marked in BOTH leagues!');
+                    return true;
+                } catch (err) {
+                    console.error('Error marking winner:', err);
+                    alert('❌ Error: ' + err.message);
+                    return false;
+                }
+            };
+            
+            return h('div', { className: 'min-h-screen dual-bg p-4 md:p-8' },
+                h('div', { className: 'max-w-4xl mx-auto' },
+                    // Header
+                    h('div', { className: 'text-center mb-8' },
+                        h('h1', { 
+                            className: 'text-6xl md:text-8xl font-black mb-4 text-white drop-shadow-2xl',
+                            style: { fontFamily: '"Bebas Neue", cursive' }
+                        }, '🔥 DUAL LEAGUE SCORING 🔥'),
+                        h('p', { 
+                            className: 'text-2xl md:text-3xl text-white font-bold drop-shadow-lg mb-4',
+                            style: { fontFamily: '"Playfair Display", serif' }
+                        }, 'Score Once • Updates Both Leagues'),
+                        h('p', { className: 'text-lg text-white/90' }, `Episode ${currentEpisode}`)
+                    ),
+                    
+                    // Info Cards
+                    h('div', { className: 'grid md:grid-cols-2 gap-4 mb-8' },
+                        h('div', { className: 'bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-xl' },
+                            h('h3', { className: 'text-xl font-bold text-blue-600 mb-2' }, '📊 Family League'),
+                            h('p', { className: 'text-gray-700 mb-2' }, 'Austin • Sandra • Ashlynn'),
+                            h('p', { className: 'text-gray-700 mb-4' }, 'Jackson/Ray • Maura • Ryan/Jordan'),
+                            h('a', {
+                                href: 'scoring.html',
+                                target: '_blank',
+                                className: 'flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold'
+                            },
+                                h(Icons.ExternalLink, { size: 16 }),
+                                'View Full Leaderboard →'
+                            )
+                        ),
+                        h('div', { className: 'bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-xl' },
+                            h('h3', { className: 'text-xl font-bold text-purple-600 mb-2' }, '💼 Work League'),
+                            h('p', { className: 'text-gray-700 mb-2' }, 'Jordan • Ryan • Hayley'),
+                            h('p', { className: 'text-gray-700 mb-4' }, 'Scott • Joe • Rachel'),
+                            h('a', {
+                                href: 'https://jaxdunes.github.io/JordansWorkSurvivor/scoring.html',
+                                target: '_blank',
+                                className: 'flex items-center gap-2 text-purple-600 hover:text-purple-700 font-semibold'
+                            },
+                                h(Icons.ExternalLink, { size: 16 }),
+                                'View Full Leaderboard →'
+                            )
+                        )
+                    ),
+                    
+                    // Action Buttons
+                    h('div', { className: 'bg-white/95 backdrop-blur-md rounded-2xl p-8 shadow-xl' },
+                        h('h2', { 
+                            className: 'text-3xl font-black mb-6 text-center',
+                            style: { fontFamily: '"Bebas Neue", cursive' }
+                        }, 'SCORING ACTIONS'),
+                        h('div', { className: 'grid gap-4' },
+                            h('button', {
+                                onClick: () => setShowAddScore(true),
+                                className: 'w-full px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-bold text-lg hover:shadow-lg transition flex items-center justify-center gap-3'
+                            },
+                                h(Icons.Plus, { size: 24 }),
+                                'Add Points to Both Leagues'
+                            ),
+                            h('button', {
+                                onClick: () => setShowMarkElimination(true),
+                                className: 'w-full px-8 py-4 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl font-bold text-lg hover:shadow-lg transition flex items-center justify-center gap-3'
+                            },
+                                h(Icons.X, { size: 24 }),
+                                'Mark Elimination in Both Leagues'
+                            ),
+                            h('button', {
+                                onClick: () => setShowMarkWinner(true),
+                                className: 'w-full px-8 py-4 bg-gradient-to-r from-yellow-500 to-amber-500 text-white rounded-xl font-bold text-lg hover:shadow-lg transition flex items-center justify-center gap-3'
+                            },
+                                h(Icons.Trophy, { size: 24 }),
+                                'Mark Winner in Both Leagues'
+                            )
+                        )
+                    ),
+                    
+                    // Add Points Modal
+                    showAddScore && h('div', { 
+                        className: 'modal-backdrop',
+                        onClick: () => setShowAddScore(false)
+                    },
+                        h('div', { 
+                            className: 'modal-content',
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            h('div', { className: 'p-6' },
+                                h('div', { className: 'flex justify-between items-center mb-6' },
+                                    h('h2', { 
+                                        className: 'text-2xl font-black',
+                                        style: { fontFamily: '"Bebas Neue", cursive' }
+                                    }, '➕ ADD POINTS'),
+                                    h('button', {
+                                        onClick: () => setShowAddScore(false),
+                                        className: 'text-gray-500 hover:text-gray-700'
+                                    }, h(Icons.X, { size: 24 }))
+                                ),
+                                
+                                h('div', { className: 'bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg mb-6 border-2 border-blue-200' },
+                                    h('p', { className: 'font-bold text-center text-gray-900' }, '✨ This will add points to BOTH leagues! ✨'),
+                                    h('p', { className: 'text-sm text-center text-gray-700 mt-1' }, 'Family League & Work League')
+                                ),
+                                
+                                h('div', { className: 'space-y-4' },
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Select Player'),
+                                        h('select', {
+                                            id: 'dual-player-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none'
+                                        },
+                                            h('option', { value: '' }, 'Choose a player...'),
+                                            ...players.map(player =>
+                                                h('option', { key: player.id, value: player.id }, player.name)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Episode Number'),
+                                        h('select', {
+                                            id: 'dual-episode-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none'
+                                        },
+                                            h('option', { value: '' }, 'Choose episode...'),
+                                            ...[...Array(14)].map((_, i) => 
+                                                h('option', { key: i + 1, value: i + 1 }, `Episode ${i + 1}`)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Scoring Category'),
+                                        h('select', {
+                                            id: 'dual-category-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none',
+                                            onChange: (e) => {
+                                                const selected = scoringCategories.find(c => c.id === e.target.value);
+                                                if (selected) {
+                                                    document.getElementById('dual-points-input').value = selected.points;
+                                                }
+                                            }
+                                        },
+                                            h('option', { value: '' }, 'Choose category...'),
+                                            ...scoringCategories.map(cat => 
+                                                h('option', { 
+                                                    key: cat.id, 
+                                                    value: cat.id 
+                                                }, `${cat.name} (${cat.points > 0 ? '+' : ''}${cat.points} pts)`)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Points'),
+                                        h('input', {
+                                            id: 'dual-points-input',
+                                            type: 'number',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none',
+                                            placeholder: 'Auto-filled by category'
+                                        })
+                                    ),
+                                    
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Note (Optional)'),
+                                        h('input', {
+                                            id: 'dual-note-input',
+                                            type: 'text',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-orange-500 focus:outline-none',
+                                            placeholder: 'e.g., "Won against Jackson"'
+                                        })
+                                    ),
+                                    
+                                    h('button', {
+                                        onClick: async () => {
+                                            const playerId = document.getElementById('dual-player-select').value;
+                                            const episode = document.getElementById('dual-episode-select').value;
+                                            const categoryId = document.getElementById('dual-category-select').value;
+                                            const points = parseFloat(document.getElementById('dual-points-input').value);
+                                            const note = document.getElementById('dual-note-input').value;
+                                            
+                                            if (!playerId || !episode || !categoryId || isNaN(points)) {
+                                                alert('Please fill in all required fields');
+                                                return;
+                                            }
+                                            
+                                            const category = scoringCategories.find(c => c.id === categoryId);
+                                            const scoreData = {
+                                                category: category.name,
+                                                points: points,
+                                                note: note || ''
+                                            };
+                                            
+                                            const success = await addPointsToBoth(playerId, episode, scoreData);
+                                            
+                                            if (success) {
+                                                document.getElementById('dual-player-select').value = '';
+                                                document.getElementById('dual-episode-select').value = '';
+                                                document.getElementById('dual-category-select').value = '';
+                                                document.getElementById('dual-points-input').value = '';
+                                                document.getElementById('dual-note-input').value = '';
+                                                setShowAddScore(false);
+                                            }
+                                        },
+                                        className: 'w-full px-6 py-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-bold hover:shadow-lg transition text-lg'
+                                    }, '✨ Add to Both Leagues')
+                                )
+                            )
+                        )
+                    ),
+                    
+                    // Mark Elimination Modal
+                    showMarkElimination && h('div', { 
+                        className: 'modal-backdrop',
+                        onClick: () => setShowMarkElimination(false)
+                    },
+                        h('div', { 
+                            className: 'modal-content',
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            h('div', { className: 'p-6' },
+                                h('div', { className: 'flex justify-between items-center mb-6' },
+                                    h('h2', { 
+                                        className: 'text-2xl font-black',
+                                        style: { fontFamily: '"Bebas Neue", cursive' }
+                                    }, '❌ MARK ELIMINATION'),
+                                    h('button', {
+                                        onClick: () => setShowMarkElimination(false),
+                                        className: 'text-gray-500 hover:text-gray-700'
+                                    }, h(Icons.X, { size: 24 }))
+                                ),
+                                
+                                h('div', { className: 'bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg mb-6 border-2 border-red-200' },
+                                    h('p', { className: 'font-bold text-center text-gray-900' }, '🚨 This will eliminate the player in BOTH leagues! 🚨'),
+                                    h('p', { className: 'text-sm text-center text-gray-700 mt-1' }, 'Family League & Work League')
+                                ),
+                                
+                                h('div', { className: 'space-y-4' },
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Select Player'),
+                                        h('select', {
+                                            id: 'dual-elim-player-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-red-500 focus:outline-none'
+                                        },
+                                            h('option', { value: '' }, 'Choose player...'),
+                                            ...players.map(player => 
+                                                h('option', { key: player.id, value: player.id }, player.name)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Eliminated in Episode'),
+                                        h('select', {
+                                            id: 'dual-elim-episode-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-red-500 focus:outline-none'
+                                        },
+                                            h('option', { value: '' }, 'Choose episode...'),
+                                            ...[...Array(13)].map((_, i) => 
+                                                h('option', { key: i + 1, value: i + 1 }, `Episode ${i + 1}`)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('button', {
+                                        onClick: async () => {
+                                            const playerId = document.getElementById('dual-elim-player-select').value;
+                                            const episode = document.getElementById('dual-elim-episode-select').value;
+                                            
+                                            if (!playerId || !episode) {
+                                                alert('Please select both player and episode');
+                                                return;
+                                            }
+                                            
+                                            const player = players.find(p => p.id === parseInt(playerId));
+                                            if (confirm(`Eliminate ${player.name} in Episode ${episode} in BOTH leagues?`)) {
+                                                const success = await markEliminationBoth(playerId, episode);
+                                                if (success) {
+                                                    setShowMarkElimination(false);
+                                                }
+                                            }
+                                        },
+                                        className: 'w-full px-6 py-4 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl font-bold hover:shadow-lg transition text-lg'
+                                    }, '🚨 Mark Eliminated in Both')
+                                )
+                            )
+                        )
+                    ),
+                    
+                    // Mark Winner Modal
+                    showMarkWinner && h('div', { 
+                        className: 'modal-backdrop',
+                        onClick: () => setShowMarkWinner(false)
+                    },
+                        h('div', { 
+                            className: 'modal-content',
+                            onClick: (e) => e.stopPropagation()
+                        },
+                            h('div', { className: 'p-6' },
+                                h('div', { className: 'flex justify-between items-center mb-6' },
+                                    h('h2', { 
+                                        className: 'text-2xl font-black',
+                                        style: { fontFamily: '"Bebas Neue", cursive' }
+                                    }, '👑 MARK WINNER'),
+                                    h('button', {
+                                        onClick: () => setShowMarkWinner(false),
+                                        className: 'text-gray-500 hover:text-gray-700'
+                                    }, h(Icons.X, { size: 24 }))
+                                ),
+                                
+                                h('div', { className: 'bg-gradient-to-r from-yellow-50 to-amber-50 p-4 rounded-lg mb-6 border-2 border-yellow-400' },
+                                    h('p', { className: 'font-bold text-center text-gray-900' }, '🏆 This will mark the winner in BOTH leagues! 🏆'),
+                                    h('p', { className: 'text-sm text-center text-gray-700 mt-1' }, 'Family League & Work League')
+                                ),
+                                
+                                h('div', { className: 'space-y-4' },
+                                    h('div', {},
+                                        h('label', { className: 'block text-sm font-bold text-gray-700 mb-2' }, 'Select Sole Survivor'),
+                                        h('select', {
+                                            id: 'dual-winner-select',
+                                            className: 'w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-yellow-500 focus:outline-none'
+                                        },
+                                            h('option', { value: '' }, 'Choose winner...'),
+                                            ...players.map(player => 
+                                                h('option', { key: player.id, value: player.id }, player.name)
+                                            )
+                                        )
+                                    ),
+                                    
+                                    h('button', {
+                                        onClick: async () => {
+                                            const playerId = document.getElementById('dual-winner-select').value;
+                                            
+                                            if (!playerId) {
+                                                alert('Please select a player');
+                                                return;
+                                            }
+                                            
+                                            const player = players.find(p => p.id === parseInt(playerId));
+                                            if (confirm(`Mark ${player.name} as Sole Survivor in BOTH leagues?`)) {
+                                                const success = await markWinnerBoth(playerId);
+                                                if (success) {
+                                                    setShowMarkWinner(false);
+                                                }
+                                            }
+                                        },
+                                        className: 'w-full px-6 py-4 bg-gradient-to-r from-yellow-500 to-amber-500 text-white rounded-xl font-bold hover:shadow-lg transition text-lg'
+                                    }, '🎉 Mark Winner in Both')
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        }
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(h(DualScoringPage));
+    }
+    </script>
+</body>
+</html>
